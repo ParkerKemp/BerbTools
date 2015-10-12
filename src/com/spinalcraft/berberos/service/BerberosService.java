@@ -9,7 +9,7 @@ import java.security.KeyPair;
 import javax.crypto.SecretKey;
 import com.spinalcraft.berberos.common.Authenticator;
 import com.spinalcraft.berberos.common.BerberosEntity;
-import com.spinalcraft.berberos.common.ClientTicket;
+import com.spinalcraft.berberos.common.ServiceTicket;
 import com.spinalcraft.easycrypt.EasyCrypt;
 import com.spinalcraft.easycrypt.messenger.MessageReceiver;
 import com.spinalcraft.easycrypt.messenger.MessageSender;
@@ -34,6 +34,10 @@ public abstract class BerberosService extends BerberosEntity{
 				return false;
 		}
 		return true;
+	}
+	
+	public String getIdentity(){
+		return identity;
 	}
 	
 	private SecretKey register(String accessKey){
@@ -64,22 +68,27 @@ public abstract class BerberosService extends BerberosEntity{
 	}
 	
 	public ServiceAmbassador getAmbassador(Socket socket){
+		System.out.println("Getting ambassador.");
 		MessageReceiver receiver = getReceiver(socket, crypt);
 		receiver.receiveMessage();
 		String ticketCipher = receiver.getItem("ticket");
 		String authCipher = receiver.getItem("authenticator");
 		
-		if(authenticatorCached(authCipher))
+		if(authenticatorCached(authCipher)){
+			System.err.println("Duplicate authenticator detected. Possible replay attempt!");
 			return null;
+		}
 		
-		ClientTicket ticket = ClientTicket.fromCipher(ticketCipher, secretKey, crypt);
-		if(ticket == null)
+		ServiceTicket ticket = ServiceTicket.fromCipher(ticketCipher, secretKey, crypt);
+		if(ticket == null){
 			return null;
+		}
 		
 		Authenticator authenticator = Authenticator.fromCipher(authCipher, ticket.sessionKey, crypt);
 		
 		if(validTicket(ticket) && validAuthenticator(authenticator, ticket) && cacheAuthenticator(authCipher))
 			return new ServiceAmbassador(socket, ticket.sessionKey, crypt, this);
+		System.err.println("Ticket or authenticator was invalid.");
 		return null;
 	}
 	
@@ -87,12 +96,12 @@ public abstract class BerberosService extends BerberosEntity{
 	
 	protected abstract boolean cacheAuthenticator(String authenticator);
 	
-	private boolean validTicket(ClientTicket ticket){
+	private boolean validTicket(ServiceTicket ticket){
 		return ticket.expiration > System.currentTimeMillis() / 1000;
 	}
 	
-	private boolean validAuthenticator(Authenticator authenticator, ClientTicket ticket){
-		return authenticator.identity.equals(ticket.identity);
+	private boolean validAuthenticator(Authenticator authenticator, ServiceTicket ticket){
+		return authenticator.identity.equals(ticket.clientIdentity);
 	}
 	
 	protected abstract void storeSecretKey(String secretKey);

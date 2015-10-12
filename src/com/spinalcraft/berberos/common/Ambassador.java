@@ -19,6 +19,7 @@ public class Ambassador {
 		this.socket = socket;
 		this.sessionKey = sessionKey;
 		this.crypt = crypt;
+		this.entity = entity;
 	}
 	
 	public MessageSender getSender(){

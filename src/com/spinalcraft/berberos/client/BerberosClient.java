@@ -1,7 +1,6 @@
 package com.spinalcraft.berberos.client;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.security.MessageDigest;
@@ -18,23 +17,27 @@ import com.spinalcraft.easycrypt.messenger.MessageSender;
 
 public abstract class BerberosClient extends BerberosEntity{
 	protected EasyCrypt crypt;
+	protected boolean cacheTickets = true;
 	
 	public BerberosClient(EasyCrypt crypt){
 		this.crypt = crypt;
 	}
 	
 	public ClientAmbassador getAmbassador(Socket socket, String username, String password, String service){
-		SecretKey secretKey = crypt.loadSecretKey(getHash(username, password));
+		String hash = getHash(username, password);
+		SecretKey secretKey = crypt.loadSecretKey(hash);
 		String serviceTicket = retrieveTicket(service);
 		String sessionKeyString = retrieveSessionKey(service);
 		SecretKey sessionKey;
-		if(serviceTicket == null || sessionKeyString == null){
+		if(!cacheTickets || serviceTicket == null || sessionKeyString == null){
 			MessageReceiver receiver = requestTicket(username, secretKey, service);
-			if(receiver.getHeader("status").equals("bad"))
+			if(receiver == null || receiver.getHeader("status") == null || receiver.getHeader("status").equals("bad"))
 				return null;
 			serviceTicket = extractServiceTicket(receiver, service);
 			ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
 			sessionKey = clientTicket.sessionKey;
+			cacheTicket(service, receiver.getItem("serviceTicket"));
+			cacheSessionKey(service, crypt.stringFromSecretKey(sessionKey));
 		}
 		else{
 			sessionKey = crypt.loadSecretKey(sessionKeyString);
@@ -55,9 +58,12 @@ public abstract class BerberosClient extends BerberosEntity{
 	private boolean receiveHandshakeResponse(Socket socket, SecretKey sessionKey, String service){
 		MessageReceiver receiver = getReceiver(socket, crypt);
 		receiver.receiveMessage();
-		String serviceIdentity = receiver.getItem("identity");
+		String authenticatorCipher = receiver.getItem("authenticator");
+		Authenticator authenticator = Authenticator.fromCipher(authenticatorCipher, sessionKey, crypt);
+		if(authenticator == null)
+			return false;
 		
-		return serviceIdentity.equals(service);
+		return authenticator.identity.equals(service);
 	}
 	
 	private void sendHandshakeRequest(Socket socket, String identity, SecretKey sessionKey, String serviceTicket){
@@ -71,7 +77,7 @@ public abstract class BerberosClient extends BerberosEntity{
 		Authenticator authenticator = new Authenticator();
 		authenticator.identity = identity;
 		authenticator.timestamp = System.currentTimeMillis() / 1000;
-		String json = authenticator.getJson().getAsString();
+		String json = authenticator.getJson().toString();
 		byte[] cipher = crypt.encryptMessage(sessionKey, json);
 		return crypt.encode(cipher);
 	}
@@ -87,7 +93,8 @@ public abstract class BerberosClient extends BerberosEntity{
 			sender.sendMessage();
 			
 			MessageReceiver receiver = getReceiver(socket, crypt);
-			receiver.receiveMessage();
+			if(!receiver.receiveMessage())
+				return null;
 			socket.close();
 			return receiver;
 			
@@ -108,7 +115,6 @@ public abstract class BerberosClient extends BerberosEntity{
 	
 	private String extractServiceTicket(MessageReceiver receiver, String service){
 		String serviceTicketCipher = receiver.getItem("serviceTicket");
-		cacheTicket(service, serviceTicketCipher);
 
 		return serviceTicketCipher;
 	}
@@ -124,14 +130,20 @@ public abstract class BerberosClient extends BerberosEntity{
 		try {
 			md = MessageDigest.getInstance("SHA-256");
 
-			md.update(str.getBytes("UTF-8"));
+			md.update(str.getBytes());
 			byte[] digest = md.digest();
-			return crypt.encode(digest);
-		} catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+			return bytesToHex(digest);
+		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 			return null;
 		}
 	}
+	
+	private String bytesToHex(byte[] bytes) {
+        StringBuffer result = new StringBuffer();
+        for (byte byt : bytes) result.append(Integer.toString((byt & 0xff) + 0x100, 16).substring(1));
+        return result.toString();
+    }
 	
 	protected abstract void cacheSessionKey(String service, String sessionKey);
 	

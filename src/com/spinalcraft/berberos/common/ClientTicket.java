@@ -20,11 +20,13 @@ public class ClientTicket {
 	
 	public static ClientTicket fromCipher(String cipher, SecretKey secretKey, EasyCrypt crypt){
 		ClientTicket ticket = new ClientTicket(crypt);
-		String json = crypt.decryptMessage(secretKey, cipher.getBytes());
+		String json = crypt.decryptMessage(secretKey, crypt.decode(cipher));
 		if(json == null){
+			System.err.println("Failed to decrypt Json.");
 			return null;
 		}
 		try{
+			System.out.println("Json: " + json);
 			JsonParser parser = new JsonParser();
 			JsonObject obj = parser.parse(json).getAsJsonObject();
 			ticket.identity = obj.get("identity").getAsString();
@@ -32,6 +34,7 @@ public class ClientTicket {
 			ticket.sessionKey = crypt.loadSecretKey(obj.get("sessionKey").getAsString());
 			return ticket;
 		}catch(JsonParseException e){
+			System.err.println("Decrypted message was not valid Json.");
 			return null;
 		}
 	}
@@ -40,7 +43,7 @@ public class ClientTicket {
 		JsonObject obj = new JsonObject();
 		obj.addProperty("identity", identity);
 		obj.addProperty("expiration", expiration);
-		obj.addProperty("secretKey", crypt.stringFromSecretKey(sessionKey));
+		obj.addProperty("sessionKey", crypt.stringFromSecretKey(sessionKey));
 		return obj;
 	}
 }

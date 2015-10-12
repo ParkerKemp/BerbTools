@@ -13,8 +13,9 @@ public class Authenticator {
 	
 	public static Authenticator fromCipher(String cipher, SecretKey secretKey, EasyCrypt crypt){
 		Authenticator authenticator = new Authenticator();
-		String json = crypt.decryptMessage(secretKey, cipher.getBytes());
+		String json = crypt.decryptMessage(secretKey, crypt.decode(cipher));
 		if(json == null){
+			System.err.println("Failed to decrypt Json.");
 			return null;
 		}
 		try{
@@ -24,6 +25,7 @@ public class Authenticator {
 			authenticator.timestamp = obj.get("timestamp").getAsLong();
 			return authenticator;
 		}catch(JsonParseException e){
+			System.err.println("Decrypted message was not valid Json.");
 			return null;
 		}
 	}

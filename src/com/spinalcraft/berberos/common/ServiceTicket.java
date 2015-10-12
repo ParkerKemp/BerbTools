@@ -21,8 +21,9 @@ public class ServiceTicket {
 	
 	public static ServiceTicket fromCipher(String cipher, SecretKey secretKey, EasyCrypt crypt){
 		ServiceTicket ticket = new ServiceTicket(crypt);
-		String json = crypt.decryptMessage(secretKey, cipher.getBytes());
+		String json = crypt.decryptMessage(secretKey, crypt.decode(cipher));
 		if(json == null){
+			System.err.println("Failed to decrypt Json.");
 			return null;
 		}
 		try{
@@ -34,6 +35,7 @@ public class ServiceTicket {
 			ticket.sessionKey = crypt.loadSecretKey(obj.get("sessionKey").getAsString());
 			return ticket;
 		}catch(JsonParseException e){
+			System.err.println("Decrypted message was not valid Json.");
 			return null;
 		}
 	}
@@ -43,7 +45,7 @@ public class ServiceTicket {
 		obj.addProperty("clientIdentity", clientIdentity);
 		obj.addProperty("serviceIdentity", serviceIdentity);
 		obj.addProperty("expiration", expiration);
-		obj.addProperty("secretKey", crypt.stringFromSecretKey(sessionKey));
+		obj.addProperty("sessionKey", crypt.stringFromSecretKey(sessionKey));
 		return obj;
 	}
 }
