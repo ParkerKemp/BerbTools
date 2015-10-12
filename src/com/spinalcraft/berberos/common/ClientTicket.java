@@ -26,7 +26,6 @@ public class ClientTicket {
 			return null;
 		}
 		try{
-			System.out.println("Json: " + json);
 			JsonParser parser = new JsonParser();
 			JsonObject obj = parser.parse(json).getAsJsonObject();
 			ticket.identity = obj.get("identity").getAsString();
