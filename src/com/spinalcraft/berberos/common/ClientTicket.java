@@ -1,0 +1,46 @@
+package com.spinalcraft.berberos.common;
+
+import javax.crypto.SecretKey;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+import com.spinalcraft.easycrypt.EasyCrypt;
+
+public class ClientTicket {
+	public String identity;
+	public long expiration;
+	public SecretKey sessionKey;
+	
+	private EasyCrypt crypt;
+	
+	public ClientTicket(EasyCrypt crypt){
+		this.crypt = crypt;
+	}
+	
+	public static ClientTicket fromCipher(String cipher, SecretKey secretKey, EasyCrypt crypt){
+		ClientTicket ticket = new ClientTicket(crypt);
+		String json = crypt.decryptMessage(secretKey, cipher.getBytes());
+		if(json == null){
+			return null;
+		}
+		try{
+			JsonParser parser = new JsonParser();
+			JsonObject obj = parser.parse(json).getAsJsonObject();
+			ticket.identity = obj.get("identity").getAsString();
+			ticket.expiration = obj.get("expiration").getAsLong();
+			ticket.sessionKey = crypt.loadSecretKey(obj.get("sessionKey").getAsString());
+			return ticket;
+		}catch(JsonParseException e){
+			return null;
+		}
+	}
+	
+	public JsonObject getJson(){
+		JsonObject obj = new JsonObject();
+		obj.addProperty("identity", identity);
+		obj.addProperty("expiration", expiration);
+		obj.addProperty("secretKey", crypt.stringFromSecretKey(sessionKey));
+		return obj;
+	}
+}
