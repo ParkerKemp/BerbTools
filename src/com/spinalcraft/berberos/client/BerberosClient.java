@@ -24,7 +24,7 @@ public abstract class BerberosClient extends BerberosEntity{
 	}
 	
 	public ClientAmbassador getAmbassador(Socket socket, String username, String password, String service){
-		SecretKey secretKey = crypt.loadSecretKey(getHash(password));
+		SecretKey secretKey = crypt.loadSecretKey(getHash(username, password));
 		String serviceTicket = retrieveTicket(service);
 		String sessionKeyString = retrieveSessionKey(service);
 		SecretKey sessionKey;
@@ -118,12 +118,13 @@ public abstract class BerberosClient extends BerberosEntity{
 		return ClientTicket.fromCipher(clientTicketCipher, secretKey, crypt);
 	}
 	
-	private String getHash(String password){
+	private String getHash(String username, String password){
 		MessageDigest md;
+		String str = username + "spinalcraft" + password;
 		try {
 			md = MessageDigest.getInstance("SHA-256");
 
-			md.update(password.getBytes("UTF-8"));
+			md.update(str.getBytes("UTF-8"));
 			byte[] digest = md.digest();
 			return crypt.encode(digest);
 		} catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
