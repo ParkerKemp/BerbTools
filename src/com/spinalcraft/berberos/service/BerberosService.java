@@ -15,11 +15,13 @@ import com.spinalcraft.easycrypt.messenger.MessageReceiver;
 import com.spinalcraft.easycrypt.messenger.MessageSender;
 
 public abstract class BerberosService extends BerberosEntity{
+	private String identity;
 	private SecretKey secretKey;
 	private EasyCrypt crypt;
 	
-	public BerberosService(String accessKey, EasyCrypt crypt){
+	public BerberosService(String identity, String accessKey, EasyCrypt crypt){
 		this.crypt = crypt;
+		this.identity = identity;
 		secretKey = crypt.loadSecretKey(retrieveSecretKey());
 		if(secretKey == null)
 			if(register(accessKey))
@@ -35,7 +37,8 @@ public abstract class BerberosService extends BerberosEntity{
 			KeyPair keyPair = crypt.generateKeys();
 			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
 			MessageSender sender = getSender(socket, crypt);
-			sender.addHeader("intent", "serviceAuth");
+			sender.addHeader("intent", "registerService");
+			sender.addItem("identity", identity);
 			sender.addItem("publicKey", crypt.stringFromPublicKey(keyPair.getPublic()));
 			sender.addItem("accessKey", accessKey);
 			sender.sendMessage();
@@ -43,8 +46,9 @@ public abstract class BerberosService extends BerberosEntity{
 			MessageReceiver receiver = getReceiver(socket, crypt);
 			receiver.receiveMessage();
 			if(receiver.getHeader("status").equals("good")){
-				String secretKey = receiver.getItem("secretKey");
-				storeSecretKey(secretKey);
+				byte[] secretKeyCipher = crypt.decode(receiver.getItem("secretKey"));
+				secretKey = crypt.decryptKey(keyPair.getPrivate(), secretKeyCipher);
+				storeSecretKey(crypt.stringFromSecretKey(secretKey));
 				return true;
 			}
 		} catch (IOException | GeneralSecurityException e) {
@@ -83,21 +87,6 @@ public abstract class BerberosService extends BerberosEntity{
 	
 	private boolean validAuthenticator(Authenticator authenticator, ClientTicket ticket){
 		return authenticator.identity.equals(ticket.identity);
-//		String json = crypt.decryptMessage(ticket.sessionKey, authenticator.getBytes());
-//		if(json == null){
-//			return false;
-//		}
-//		try{
-//			JsonParser parser = new JsonParser();
-//			JsonObject obj = parser.parse(json).getAsJsonObject();
-//			String identity = obj.get("identity").getAsString();
-//			
-//			long timestamp = obj.get("timestamp").getAsLong();
-//			
-//			return identity.equals(ticket.identity);
-//		}catch(JsonParseException e){
-//			return false;
-//		}
 	}
 	
 	protected abstract void storeSecretKey(String secretKey);
