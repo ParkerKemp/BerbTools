@@ -9,7 +9,6 @@ import java.security.NoSuchAlgorithmException;
 
 import javax.crypto.SecretKey;
 
-import com.spinalcraft.berberos.common.Ambassador;
 import com.spinalcraft.berberos.common.Authenticator;
 import com.spinalcraft.berberos.common.BerberosEntity;
 import com.spinalcraft.berberos.common.ClientTicket;
@@ -24,7 +23,7 @@ public abstract class BerberosClient extends BerberosEntity{
 		this.crypt = crypt;
 	}
 	
-	public Ambassador getAmbassador(String username, String password, String service){
+	public ClientAmbassador getAmbassador(Socket socket, String username, String password, String service){
 		SecretKey secretKey = crypt.loadSecretKey(getHash(password));
 		String serviceTicket = retrieveTicket(service);
 		String sessionKeyString = retrieveSessionKey(service);
@@ -41,20 +40,13 @@ public abstract class BerberosClient extends BerberosEntity{
 		
 		if(serviceTicket == null)
 			return null;
+
+		sendHandshakeRequest(socket, username, sessionKey, serviceTicket);
+		if(!receiveHandshakeResponse(socket, sessionKey, service))
+			return null;
 		
-		Socket socket = new Socket();
-		Ambassador ambassador = null;
-		try {
-			socket.connect(new InetSocketAddress("mc.spinalcraft.com", 9494), 5000);
-			
-			sendHandshakeRequest(socket, username, sessionKey, serviceTicket);
-			if(!receiveHandshakeResponse(socket, sessionKey, service))
-				return null;
-			
-			ambassador = new Ambassador(socket, sessionKey, crypt, this);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		ClientAmbassador ambassador = new ClientAmbassador(socket, sessionKey, crypt, this);
+
 		return ambassador;
 	}
 	
@@ -131,7 +123,7 @@ public abstract class BerberosClient extends BerberosEntity{
 
 			md.update(password.getBytes("UTF-8"));
 			byte[] digest = md.digest();
-			return new String(digest);
+			return crypt.encode(digest);
 		} catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
 			e.printStackTrace();
 			return null;

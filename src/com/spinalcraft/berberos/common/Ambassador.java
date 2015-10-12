@@ -25,8 +25,13 @@ public class Ambassador {
 		return entity.getSender(socket, crypt);
 	}
 	
-	public boolean sendMessage(MessageSender sender) throws IOException{
-		return sender.sendEncrypted(sessionKey);
+	public boolean sendMessage(MessageSender sender){
+		try {
+			return sender.sendEncrypted(sessionKey);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return false;
+		}
 	}
 	
 	public MessageReceiver receiveMessage(){
