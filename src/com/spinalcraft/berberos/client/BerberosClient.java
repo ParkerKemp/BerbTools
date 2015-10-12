@@ -30,6 +30,8 @@ public abstract class BerberosClient extends BerberosEntity{
 		SecretKey sessionKey;
 		if(serviceTicket == null || sessionKeyString == null){
 			MessageReceiver receiver = requestTicket(username, secretKey, service);
+			if(receiver.getHeader("status").equals("bad"))
+				return null;
 			serviceTicket = extractServiceTicket(receiver, service);
 			ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
 			sessionKey = clientTicket.sessionKey;
