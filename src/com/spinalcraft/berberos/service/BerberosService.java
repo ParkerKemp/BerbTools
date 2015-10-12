@@ -19,19 +19,24 @@ public abstract class BerberosService extends BerberosEntity{
 	private SecretKey secretKey;
 	private EasyCrypt crypt;
 	
-	public BerberosService(String identity, String accessKey, EasyCrypt crypt){
-		this.crypt = crypt;
-		this.identity = identity;
-		secretKey = crypt.loadSecretKey(retrieveSecretKey());
-		if(secretKey == null)
-			if(register(accessKey))
-				secretKey = crypt.loadSecretKey(retrieveSecretKey());
+	public BerberosService(){
 	}
 	
-	private boolean register(String accessKey){
-		if(retrieveSecretKey() != null){
-			return true;
+	public boolean init(String identity, String accessKey, EasyCrypt crypt){
+		this.crypt = crypt;
+		this.identity = identity;
+		String secretKeyString = retrieveSecretKey();
+		if(secretKeyString != null)
+			secretKey = crypt.loadSecretKey(secretKeyString);
+		else{
+			secretKey = register(accessKey);
+			if(secretKey == null)
+				return false;
 		}
+		return true;
+	}
+	
+	private SecretKey register(String accessKey){
 		Socket socket = new Socket();
 		try {
 			KeyPair keyPair = crypt.generateKeys();
@@ -44,20 +49,21 @@ public abstract class BerberosService extends BerberosEntity{
 			sender.sendMessage();
 			
 			MessageReceiver receiver = getReceiver(socket, crypt);
-			receiver.receiveMessage();
+			if(!receiver.receiveMessage())
+				return null;
 			if(receiver.getHeader("status").equals("good")){
 				byte[] secretKeyCipher = crypt.decode(receiver.getItem("secretKey"));
-				secretKey = crypt.decryptKey(keyPair.getPrivate(), secretKeyCipher);
-				storeSecretKey(crypt.stringFromSecretKey(secretKey));
-				return true;
+				SecretKey key = crypt.decryptKey(keyPair.getPrivate(), secretKeyCipher);
+				storeSecretKey(crypt.stringFromSecretKey(key));
+				return key;
 			}
 		} catch (IOException | GeneralSecurityException e) {
 			e.printStackTrace();
 		}
-		return false;
+		return null;
 	}
 	
-	public ServiceAmbassador getClientHandler(Socket socket){
+	public ServiceAmbassador getAmbassador(Socket socket){
 		MessageReceiver receiver = getReceiver(socket, crypt);
 		receiver.receiveMessage();
 		String ticketCipher = receiver.getItem("ticket");

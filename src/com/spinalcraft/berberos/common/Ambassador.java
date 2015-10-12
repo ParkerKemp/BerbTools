@@ -31,7 +31,8 @@ public class Ambassador {
 	
 	public MessageReceiver receiveMessage(){
 		MessageReceiver receiver = entity.getReceiver(socket, crypt);
-		receiver.receiveMessage(sessionKey);
-		return receiver;
+		if(receiver.receiveMessage(sessionKey))
+			return receiver;
+		return null;
 	}
 }
