@@ -10,7 +10,6 @@ import javax.crypto.SecretKey;
 
 import com.spinalcraft.berberos.common.Authenticator;
 import com.spinalcraft.berberos.common.BerberosEntity;
-import com.spinalcraft.berberos.common.ClientTicket;
 import com.spinalcraft.easycrypt.EasyCrypt;
 import com.spinalcraft.easycrypt.messenger.MessageReceiver;
 import com.spinalcraft.easycrypt.messenger.MessageSender;
@@ -24,46 +23,76 @@ public abstract class BerberosClient extends BerberosEntity{
 	}
 	
 	public ClientAmbassador getAmbassador(Socket socket, String username, String password, String service){
-		String hash = getHash(username, password);
-		SecretKey secretKey = crypt.loadSecretKey(hash);
-		String serviceTicket = retrieveTicket(service);
-		String sessionKeyString = retrieveSessionKey(service);
-		SecretKey sessionKey;
-		if(!cacheTickets || serviceTicket == null || sessionKeyString == null){
-			MessageReceiver receiver = requestTicket(username, secretKey, service);
-			if(receiver == null || receiver.getHeader("status") == null || receiver.getHeader("status").equals("bad"))
-				return null;
-			serviceTicket = extractServiceTicket(receiver, service);
-			ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
-			sessionKey = clientTicket.sessionKey;
-			cacheTicket(service, receiver.getItem("serviceTicket"));
-			cacheSessionKey(service, crypt.stringFromSecretKey(sessionKey));
-		}
-		else{
-			sessionKey = crypt.loadSecretKey(sessionKeyString);
+		AccessPackage accessPackage = null;
+		
+		if(cacheTickets){
+			accessPackage = loadCachedAccessPackage(service);
 		}
 		
-		if(serviceTicket == null)
-			return null;
-
-		sendHandshakeRequest(socket, username, sessionKey, serviceTicket);
-		if(!receiveHandshakeResponse(socket, sessionKey, service))
+		if(accessPackage == null)
+			accessPackage = getAccessFromAuthServer(socket, username, password, service);
+		
+		if(accessPackage == null)
 			return null;
 		
-		ClientAmbassador ambassador = new ClientAmbassador(socket, sessionKey, crypt, this);
-
-		return ambassador;
+		return performHandshake(socket, username, password, accessPackage, service);
 	}
 	
-	private boolean receiveHandshakeResponse(Socket socket, SecretKey sessionKey, String service){
+	private AccessPackage getAccessFromAuthServer(Socket socket, String username, String password, String service){
+		AccessPackage accessPackage = new AccessPackage();
+		String hash = getHash(username, password);
+		SecretKey secretKey = crypt.loadSecretKey(hash);
+		
+		MessageReceiver receiver = requestTicket(username, secretKey, service);
+		if(receiver == null || receiver.getHeader("status") == null || receiver.getHeader("status").equals("bad"))
+			return null;
+		accessPackage.serviceTicket = extractServiceTicket(receiver, service);
+		ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
+		accessPackage.sessionKey = clientTicket.sessionKey;
+		if(cacheTickets){
+			cacheTicket(service, receiver.getItem("serviceTicket"));
+			cacheSessionKey(service, crypt.stringFromSecretKey(accessPackage.sessionKey));
+		}
+		return accessPackage;
+	}
+	
+	private AccessPackage loadCachedAccessPackage(String service){
+		AccessPackage accessPackage = new AccessPackage();
+		accessPackage.serviceTicket = retrieveTicket(service);
+		String sessionKeyString = retrieveSessionKey(service);
+		if(sessionKeyString == null || accessPackage.serviceTicket == null)
+			return null;
+		accessPackage.sessionKey = crypt.loadSecretKey(sessionKeyString);
+		return accessPackage;
+	}
+	
+	private ClientAmbassador performHandshake(Socket socket, String username, String password, AccessPackage accessPackage, String service){
+		sendHandshakeRequest(socket, username, accessPackage.sessionKey, accessPackage.serviceTicket);
+		return receiveHandshakeResponse(socket, username, password, accessPackage.sessionKey, service);
+	}
+	
+	private ClientAmbassador receiveHandshakeResponse(Socket socket, String username, String password, SecretKey sessionKey, String service){
 		MessageReceiver receiver = getReceiver(socket, crypt);
 		receiver.receiveMessage();
+		if(receiver.getHeader("status") != null && receiver.getHeader("status").equals("bad")){
+			if(receiver.getItem("reason") != null && receiver.getItem("reason").equals("ticketExpired")){
+				AccessPackage accessPackage = getAccessFromAuthServer(socket, username, password, service);
+				if(accessPackage == null)
+					return null;
+				return performHandshake(socket, username, password, accessPackage, service);
+			}
+			else{
+				return null;
+			}
+		}
 		String authenticatorCipher = receiver.getItem("authenticator");
 		Authenticator authenticator = Authenticator.fromCipher(authenticatorCipher, sessionKey, crypt);
 		if(authenticator == null)
-			return false;
+			return null;
 		
-		return authenticator.identity.equals(service);
+		if(!authenticator.identity.equals(service))
+			return null;
+		return new ClientAmbassador(socket, sessionKey, crypt, this);
 	}
 	
 	private void sendHandshakeRequest(Socket socket, String identity, SecretKey sessionKey, String serviceTicket){

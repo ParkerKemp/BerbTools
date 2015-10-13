@@ -1,4 +1,4 @@
-package com.spinalcraft.berberos.common;
+package com.spinalcraft.berberos.service;
 
 import javax.crypto.SecretKey;
 
@@ -7,19 +7,20 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.spinalcraft.easycrypt.EasyCrypt;
 
-public class ClientTicket {
-	public String identity;
+public class ServiceTicket {
+	public String clientIdentity;
+	public String serviceIdentity;
 	public long expiration;
 	public SecretKey sessionKey;
 	
 	private EasyCrypt crypt;
 	
-	public ClientTicket(EasyCrypt crypt){
+	public ServiceTicket(EasyCrypt crypt){
 		this.crypt = crypt;
 	}
 	
-	public static ClientTicket fromCipher(String cipher, SecretKey secretKey, EasyCrypt crypt){
-		ClientTicket ticket = new ClientTicket(crypt);
+	public static ServiceTicket fromCipher(String cipher, SecretKey secretKey, EasyCrypt crypt){
+		ServiceTicket ticket = new ServiceTicket(crypt);
 		String json = crypt.decryptMessage(secretKey, crypt.decode(cipher));
 		if(json == null){
 			System.err.println("Failed to decrypt Json.");
@@ -28,7 +29,8 @@ public class ClientTicket {
 		try{
 			JsonParser parser = new JsonParser();
 			JsonObject obj = parser.parse(json).getAsJsonObject();
-			ticket.identity = obj.get("identity").getAsString();
+			ticket.clientIdentity = obj.get("clientIdentity").getAsString();
+			ticket.serviceIdentity = obj.get("serviceIdentity").getAsString();
 			ticket.expiration = obj.get("expiration").getAsLong();
 			ticket.sessionKey = crypt.loadSecretKey(obj.get("sessionKey").getAsString());
 			return ticket;
@@ -40,7 +42,8 @@ public class ClientTicket {
 	
 	public JsonObject getJson(){
 		JsonObject obj = new JsonObject();
-		obj.addProperty("identity", identity);
+		obj.addProperty("clientIdentity", clientIdentity);
+		obj.addProperty("serviceIdentity", serviceIdentity);
 		obj.addProperty("expiration", expiration);
 		obj.addProperty("sessionKey", crypt.stringFromSecretKey(sessionKey));
 		return obj;

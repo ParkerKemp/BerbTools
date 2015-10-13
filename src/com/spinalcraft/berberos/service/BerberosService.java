@@ -9,7 +9,6 @@ import java.security.KeyPair;
 import javax.crypto.SecretKey;
 import com.spinalcraft.berberos.common.Authenticator;
 import com.spinalcraft.berberos.common.BerberosEntity;
-import com.spinalcraft.berberos.common.ServiceTicket;
 import com.spinalcraft.easycrypt.EasyCrypt;
 import com.spinalcraft.easycrypt.messenger.MessageReceiver;
 import com.spinalcraft.easycrypt.messenger.MessageSender;
@@ -68,7 +67,6 @@ public abstract class BerberosService extends BerberosEntity{
 	}
 	
 	public ServiceAmbassador getAmbassador(Socket socket){
-		System.out.println("Getting ambassador.");
 		MessageReceiver receiver = getReceiver(socket, crypt);
 		receiver.receiveMessage();
 		String ticketCipher = receiver.getItem("ticket");
@@ -86,7 +84,13 @@ public abstract class BerberosService extends BerberosEntity{
 		
 		Authenticator authenticator = Authenticator.fromCipher(authCipher, ticket.sessionKey, crypt);
 		
-		if(validTicket(ticket) && validAuthenticator(authenticator, ticket) && cacheAuthenticator(authCipher))
+		if(!validTicket(ticket)){
+			System.out.println("Ticket was expired.");
+			notifyOfExpiredTicket(socket);
+			return getAmbassador(socket);
+		}
+		
+		if(validAuthenticator(authenticator, ticket) && cacheAuthenticator(authCipher))
 			return new ServiceAmbassador(socket, ticket.sessionKey, crypt, this);
 		System.err.println("Ticket or authenticator was invalid.");
 		return null;
@@ -96,7 +100,16 @@ public abstract class BerberosService extends BerberosEntity{
 	
 	protected abstract boolean cacheAuthenticator(String authenticator);
 	
+	private void notifyOfExpiredTicket(Socket socket){
+		MessageSender sender = getSender(socket, crypt);
+		sender.addHeader("status", "bad");
+		sender.addItem("reason", "ticketExpired");
+		sender.sendMessage();
+	}
+	
 	private boolean validTicket(ServiceTicket ticket){
+		System.out.println("Expiration: " + ticket.expiration);
+		System.out.println("Current time: " + System.currentTimeMillis() / 1000);
 		return ticket.expiration > System.currentTimeMillis() / 1000;
 	}
 	
