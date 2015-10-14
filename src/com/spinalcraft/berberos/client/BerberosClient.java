@@ -38,10 +38,36 @@ public abstract class BerberosClient extends BerberosEntity{
 		return performHandshake(socket, username, password, accessPackage, service);
 	}
 	
+	public boolean testCredentials(String username, String password){
+		Socket socket = new Socket();
+		try {
+			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
+			MessageSender sender = getSender(socket, crypt);
+			sender.addHeader("identity", username);
+			sender.addHeader("intent", "testCredentials");
+			sender.sendMessage();
+			MessageReceiver receiver = getReceiver(socket, crypt);
+			if(!receiver.receiveMessage())
+				return false;
+			socket.close();
+			if(receiver.getHeader("status").equals("bad"))
+				return false;
+			String authCipher = receiver.getItem("authenticator");
+			Authenticator authenticator = Authenticator.fromCipher(authCipher, getSecretKey(username, password), crypt);
+			if(authenticator == null)
+				return false;
+			if(!authenticator.identity.equals("Berberos"))
+				return false;
+			return true;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+	
 	private AccessPackage getAccessFromAuthServer(Socket socket, String username, String password, String service){
 		AccessPackage accessPackage = new AccessPackage();
-		String hash = getHash(username, password);
-		SecretKey secretKey = crypt.loadSecretKey(hash);
+		SecretKey secretKey = getSecretKey(username, password);
 		
 		MessageReceiver receiver = requestTicket(username, secretKey, service);
 		if(receiver == null || receiver.getHeader("status") == null || receiver.getHeader("status").equals("bad"))
@@ -151,6 +177,11 @@ public abstract class BerberosClient extends BerberosEntity{
 	private ClientTicket extractClientTicket(MessageReceiver receiver, SecretKey secretKey){
 		String clientTicketCipher = receiver.getItem("clientTicket");
 		return ClientTicket.fromCipher(clientTicketCipher, secretKey, crypt);
+	}
+	
+	private SecretKey getSecretKey(String username, String password){
+		String hash = getHash(username, password);
+		return crypt.loadSecretKey(hash);
 	}
 	
 	private String getHash(String username, String password){
