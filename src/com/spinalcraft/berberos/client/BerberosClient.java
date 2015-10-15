@@ -42,7 +42,7 @@ public abstract class BerberosClient extends BerberosEntity{
 		return performHandshake(socket, username, password, accessPackage, service);
 	}
 	
-	public boolean testCredentials(String username, String password){
+	public ErrorCode testCredentials(String username, String password){
 		Socket socket = new Socket();
 		try {
 			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
@@ -52,29 +52,24 @@ public abstract class BerberosClient extends BerberosEntity{
 			sender.sendMessage();
 			MessageReceiver receiver = getReceiver(socket, crypt);
 			if(!receiver.receiveMessage()){
-				error(ErrorCode.CONNECTION);
-				return false;
+				return ErrorCode.CONNECTION;
 			}
 			socket.close();
 			if(receiver.getHeader("status").equals("bad")){
-				error(ErrorCode.AUTHENTICATION);
-				return false;
+				return ErrorCode.AUTHENTICATION;
 			}
 			String authCipher = receiver.getItem("authenticator");
 			Authenticator authenticator = Authenticator.fromCipher(authCipher, getSecretKey(username, password), crypt);
 			if(authenticator == null){
-				error(ErrorCode.AUTHENTICATION);
-				return false;
+				return ErrorCode.AUTHENTICATION;
 			}
 			if(!authenticator.identity.equals("Berberos")){
-				error(ErrorCode.SECURITY);
-				return false;
+				return ErrorCode.SECURITY;
 			}
-			return true;
+			return ErrorCode.NONE;
 		} catch (IOException e) {
 			e.printStackTrace();
-			error(ErrorCode.CONNECTION);
-			return false;
+			return ErrorCode.CONNECTION;
 		}
 	}
 	

@@ -1,7 +1,7 @@
 package com.spinalcraft.berberos.common;
 
 public class BerberosError {
-	public static enum ErrorCode{CONNECTION, AUTHENTICATION, SECURITY};
+	public static enum ErrorCode{NONE, CONNECTION, AUTHENTICATION, SECURITY};
 	
 	public ErrorCode error;
 	public String message = "";
