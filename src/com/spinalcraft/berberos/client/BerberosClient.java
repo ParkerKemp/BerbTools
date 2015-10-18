@@ -45,6 +45,7 @@ public abstract class BerberosClient extends BerberosEntity{
 	public ErrorCode testCredentials(String username, String password){
 		Socket socket = new Socket();
 		try {
+			socket.setSoTimeout(5000);
 			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
 			MessageSender sender = getSender(socket, crypt);
 			sender.addHeader("identity", username);
@@ -90,6 +91,10 @@ public abstract class BerberosClient extends BerberosEntity{
 		}
 		accessPackage.serviceTicket = extractServiceTicket(receiver, service);
 		ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
+		if(clientTicket == null){
+			error(ErrorCode.AUTHENTICATION);
+			return null;
+		}
 		accessPackage.sessionKey = clientTicket.sessionKey;
 		if(cacheTickets){
 			cacheTicket(service, receiver.getItem("serviceTicket"));
