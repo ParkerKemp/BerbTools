@@ -43,6 +43,7 @@ public abstract class BerberosService extends BerberosEntity{
 		Socket socket = new Socket();
 		try {
 			KeyPair keyPair = crypt.generateKeys();
+			socket.setSoTimeout(5000);
 			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
 			MessageSender sender = getSender(socket, crypt);
 			sender.addHeader("intent", "registerService");

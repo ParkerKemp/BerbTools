@@ -170,6 +170,7 @@ public abstract class BerberosClient extends BerberosEntity{
 	private MessageReceiver requestTicket(String identity, SecretKey secretKey, String service){
 		Socket socket = new Socket(); 
 		try {
+			socket.setSoTimeout(5000);
 			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
 			MessageSender sender = getSender(socket, crypt);
 			sender.addHeader("identity", identity);
