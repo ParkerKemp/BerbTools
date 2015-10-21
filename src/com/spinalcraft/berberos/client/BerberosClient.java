@@ -148,7 +148,7 @@ public abstract class BerberosClient extends BerberosEntity{
 			error(ErrorCode.SECURITY);
 			return null;
 		}
-		return new ClientAmbassador(socket, sessionKey, crypt, this);
+		return new ClientAmbassador(socket, sessionKey, crypt, this, username);
 	}
 	
 	private void sendHandshakeRequest(Socket socket, String identity, SecretKey sessionKey, String serviceTicket){
