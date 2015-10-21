@@ -74,7 +74,7 @@ public abstract class BerberosService extends BerberosEntity{
 		String authCipher = receiver.getItem("authenticator");
 		
 		if(authenticatorCached(authCipher)){
-			System.err.println("Duplicate authenticator detected. Possible replay attempt!");
+			System.err.println("Duplicate authenticator detected. I/O error or possible replay attempt!");
 			return null;
 		}
 		
