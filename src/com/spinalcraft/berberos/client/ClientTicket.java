@@ -9,6 +9,8 @@ import com.spinalcraft.easycrypt.EasyCrypt;
 
 public class ClientTicket {
 	public String identity;
+	public String serviceAddress;
+	public int servicePort;
 	public long expiration;
 	public SecretKey sessionKey;
 	
@@ -29,6 +31,8 @@ public class ClientTicket {
 			JsonParser parser = new JsonParser();
 			JsonObject obj = parser.parse(json).getAsJsonObject();
 			ticket.identity = obj.get("identity").getAsString();
+			ticket.serviceAddress = obj.get("serviceAddress").getAsString();
+			ticket.servicePort = obj.get("servicePort").getAsInt();
 			ticket.expiration = obj.get("expiration").getAsLong();
 			ticket.sessionKey = crypt.loadSecretKey(obj.get("sessionKey").getAsString());
 			return ticket;
@@ -41,6 +45,8 @@ public class ClientTicket {
 	public JsonObject getJson(){
 		JsonObject obj = new JsonObject();
 		obj.addProperty("identity", identity);
+		obj.addProperty("serviceAddress", serviceAddress);
+		obj.addProperty("servicePort", servicePort);
 		obj.addProperty("expiration", expiration);
 		obj.addProperty("sessionKey", crypt.stringFromSecretKey(sessionKey));
 		return obj;

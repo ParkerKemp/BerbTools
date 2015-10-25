@@ -17,16 +17,20 @@ import com.spinalcraft.easycrypt.messenger.MessageReceiver;
 import com.spinalcraft.easycrypt.messenger.MessageSender;
 
 public abstract class BerberosClient extends BerberosEntity{
-	
+
 	protected BerberosError lastError;
+	private String berberosAddress;
+	private int berberosPort;
 	protected EasyCrypt crypt;
 	protected boolean cacheTickets = true;
 	
-	public BerberosClient(EasyCrypt crypt){
+	public BerberosClient(String berberosAddress, int berberosPort, EasyCrypt crypt){
+		this.berberosAddress = berberosAddress;
+		this.berberosPort = berberosPort;
 		this.crypt = crypt;
 	}
 	
-	public ClientAmbassador getAmbassador(Socket socket, String username, String password, String service){
+	public ClientAmbassador getAmbassador(String username, String password, String service){
 		AccessPackage accessPackage = null;
 		
 		if(cacheTickets){
@@ -34,12 +38,12 @@ public abstract class BerberosClient extends BerberosEntity{
 		}
 		
 		if(accessPackage == null)
-			accessPackage = getAccessFromAuthServer(socket, username, password, service);
+			accessPackage = getAccessFromAuthServer(username, password, service);
 		
 		if(accessPackage == null)
 			return null;
 		
-		return performHandshake(socket, username, password, accessPackage, service);
+		return performHandshake(username, password, accessPackage, service);
 	}
 	
 	public ErrorCode testCredentials(String username, String password){
@@ -78,8 +82,30 @@ public abstract class BerberosClient extends BerberosEntity{
 		return lastError;
 	}
 	
-	private AccessPackage getAccessFromAuthServer(Socket socket, String username, String password, String service){
-		AccessPackage accessPackage = new AccessPackage();
+	private Socket connectToBerberos(){
+		return connectTo(berberosAddress, berberosPort);
+	}
+	
+	private Socket connectToService(AccessPackage accessPackage){
+		return connectTo(accessPackage.serviceAddress, accessPackage.servicePort);
+	}
+	
+	private Socket connectTo(String address, int port){
+		Socket socket = new Socket();
+		try {
+			socket.setSoTimeout(5000);
+			socket.connect(new InetSocketAddress(address, port), 5000);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+		if(socket.isConnected())
+			return socket;
+		return null;
+	}
+	
+	private AccessPackage getAccessFromAuthServer(String username, String password, String service){
+//		AccessPackage accessPackage = new AccessPackage();
 		SecretKey secretKey = getSecretKey(username, password);
 		
 		MessageReceiver receiver = requestTicket(username, secretKey, service);
@@ -89,31 +115,43 @@ public abstract class BerberosClient extends BerberosEntity{
 			error(ErrorCode.AUTHENTICATION);
 			return null;
 		}
-		accessPackage.serviceTicket = extractServiceTicket(receiver, service);
-		ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
-		if(clientTicket == null){
-			error(ErrorCode.AUTHENTICATION);
+
+		AccessPackage accessPackage = extractAccessPackage(receiver, secretKey);
+		if(accessPackage == null)
 			return null;
-		}
-		accessPackage.sessionKey = clientTicket.sessionKey;
+//		accessPackage.serviceTicket = extractServiceTicket(receiver, service);
+//		ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
+//		if(clientTicket == null){
+//			error(ErrorCode.AUTHENTICATION);
+//			return null;
+//		}
+//		accessPackage.sessionKey = clientTicket.sessionKey;
 		if(cacheTickets){
-			cacheTicket(service, receiver.getItem("serviceTicket"));
-			cacheSessionKey(service, crypt.stringFromSecretKey(accessPackage.sessionKey));
+			cacheAccessPackage(service, accessPackage.toJson(crypt));
+//			cacheTicket(service, receiver.getItem("serviceTicket"));
+//			cacheSessionKey(service, crypt.stringFromSecretKey(accessPackage.sessionKey));
 		}
 		return accessPackage;
 	}
 	
 	private AccessPackage loadCachedAccessPackage(String service){
-		AccessPackage accessPackage = new AccessPackage();
-		accessPackage.serviceTicket = retrieveTicket(service);
-		String sessionKeyString = retrieveSessionKey(service);
-		if(sessionKeyString == null || accessPackage.serviceTicket == null)
-			return null;
-		accessPackage.sessionKey = crypt.loadSecretKey(sessionKeyString);
+		String accessPackageString = retrieveAccessPackage(service);
+		AccessPackage accessPackage = AccessPackage.fromJson(accessPackageString, crypt);
+//		AccessPackage accessPackage = new AccessPackage();
+//		accessPackage.serviceTicket = retrieveTicket(service);
+//		String sessionKeyString = retrieveSessionKey(service);
+//		if(sessionKeyString == null || accessPackage.serviceTicket == null)
+//			return null;
+//		accessPackage.sessionKey = crypt.loadSecretKey(sessionKeyString);
 		return accessPackage;
 	}
 	
-	private ClientAmbassador performHandshake(Socket socket, String username, String password, AccessPackage accessPackage, String service){
+	private ClientAmbassador performHandshake(String username, String password, AccessPackage accessPackage, String service){
+		Socket socket = connectToService(accessPackage);
+		if(socket == null){
+			error(ErrorCode.CONNECTION);
+			return null;
+		}			
 		sendHandshakeRequest(socket, username, accessPackage.sessionKey, accessPackage.serviceTicket);
 		return receiveHandshakeResponse(socket, username, password, accessPackage.sessionKey, service);
 	}
@@ -126,11 +164,11 @@ public abstract class BerberosClient extends BerberosEntity{
 		}
 		if(receiver.getHeader("status") != null && receiver.getHeader("status").equals("bad")){
 			if(receiver.getItem("reason") != null && receiver.getItem("reason").equals("ticketExpired")){
-				AccessPackage accessPackage = getAccessFromAuthServer(socket, username, password, service);
+				AccessPackage accessPackage = getAccessFromAuthServer(username, password, service);
 				if(accessPackage == null){
 					return null;
 				}
-				return performHandshake(socket, username, password, accessPackage, service);
+				return performHandshake(username, password, accessPackage, service);
 			}
 			else{
 				error(ErrorCode.AUTHENTICATION);
@@ -168,35 +206,46 @@ public abstract class BerberosClient extends BerberosEntity{
 	}
 	
 	private MessageReceiver requestTicket(String identity, SecretKey secretKey, String service){
-		Socket socket = new Socket(); 
-		try {
-			socket.setSoTimeout(5000);
-			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
-			MessageSender sender = getSender(socket, crypt);
-			sender.addHeader("identity", identity);
-			sender.addHeader("intent", "ticket");
-			sender.addItem("service", service);
-			sender.sendMessage();
-			
-			MessageReceiver receiver = getReceiver(socket, crypt);
-			if(!receiver.receiveMessage()){
-				error(ErrorCode.CONNECTION);
-				return null;
-			}
-			socket.close();
-			return receiver;
-		} catch (IOException e) {
-			e.printStackTrace();
+		Socket socket = connectToBerberos();
+		if(socket == null){
 			error(ErrorCode.CONNECTION);
 			return null;
 		}
+		MessageSender sender = getSender(socket, crypt);
+		sender.addHeader("identity", identity);
+		sender.addHeader("intent", "ticket");
+		sender.addItem("service", service);
+		sender.sendMessage();
+		
+		MessageReceiver receiver = getReceiver(socket, crypt);
+		if(!receiver.receiveMessage()){
+			error(ErrorCode.CONNECTION);
+			return null;
+		}
+		return receiver;
 	}
 	
-	private String extractServiceTicket(MessageReceiver receiver, String service){
-		String serviceTicketCipher = receiver.getItem("serviceTicket");
-
-		return serviceTicketCipher;
+	private AccessPackage extractAccessPackage(MessageReceiver receiver, SecretKey secretKey){
+		ClientTicket clientTicket = extractClientTicket(receiver, secretKey);
+		if(clientTicket == null){
+			error(ErrorCode.AUTHENTICATION);
+			return null;
+		}
+		AccessPackage accessPackage = new AccessPackage();
+		
+		accessPackage.serviceTicket = receiver.getItem("serviceTicket");
+		accessPackage.sessionKey = clientTicket.sessionKey;
+		accessPackage.serviceAddress = clientTicket.serviceAddress;
+		accessPackage.servicePort = clientTicket.servicePort;
+	
+		return accessPackage;
 	}
+	
+//	private String extractServiceTicket(MessageReceiver receiver, String service){
+//		String serviceTicketCipher = receiver.getItem("serviceTicket");
+//
+//		return serviceTicketCipher;
+//	}
 	
 	private ClientTicket extractClientTicket(MessageReceiver receiver, SecretKey secretKey){
 		String clientTicketCipher = receiver.getItem("clientTicket");
@@ -237,11 +286,15 @@ public abstract class BerberosClient extends BerberosEntity{
 		lastError = new BerberosError(error, message);
 	}
 	
-	protected abstract void cacheSessionKey(String service, String sessionKey);
+	protected abstract void cacheAccessPackage(String serviceIdentity, String accessPackage);
 	
-	protected abstract String retrieveSessionKey(String service);
+	protected abstract String retrieveAccessPackage(String serviceIdentity);
 	
-	protected abstract void cacheTicket(String service, String ticket);
-	
-	protected abstract String retrieveTicket(String service);
+//	protected abstract void cacheSessionKey(String service, String sessionKey);
+//	
+//	protected abstract String retrieveSessionKey(String service);
+//	
+//	protected abstract void cacheTicket(String service, String ticket);
+//	
+//	protected abstract String retrieveTicket(String service);
 }

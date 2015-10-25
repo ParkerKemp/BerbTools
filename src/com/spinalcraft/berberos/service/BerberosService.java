@@ -15,20 +15,36 @@ import com.spinalcraft.easycrypt.messenger.MessageSender;
 
 public abstract class BerberosService extends BerberosEntity{
 	private String identity;
+	private String serviceAddress;
+	private int servicePort;
 	private SecretKey secretKey;
 	private EasyCrypt crypt;
 	
-	public BerberosService(){
+	public BerberosService(EasyCrypt crypt){
+		this.crypt = crypt;
 	}
 	
-	public boolean init(String identity, String accessKey, EasyCrypt crypt){
-		this.crypt = crypt;
+	public BerberosService setIdentity(String identity){
 		this.identity = identity;
+		return this;
+	}
+	
+	public BerberosService setServiceAddress(String address){
+		this.serviceAddress = address;
+		return this;
+	}
+	
+	public BerberosService setPort(int port){
+		this.servicePort = port;
+		return this;
+	}
+	
+	public boolean init(String address, int port, String accessKey){
 		String secretKeyString = retrieveSecretKey();
 		if(secretKeyString != null)
 			secretKey = crypt.loadSecretKey(secretKeyString);
 		else{
-			secretKey = register(accessKey);
+			secretKey = register(address, port, accessKey);
 			if(secretKey == null)
 				return false;
 		}
@@ -39,16 +55,18 @@ public abstract class BerberosService extends BerberosEntity{
 		return identity;
 	}
 	
-	private SecretKey register(String accessKey){
+	private SecretKey register(String address, int port, String accessKey){
 		Socket socket = new Socket();
 		try {
 			KeyPair keyPair = crypt.generateKeys();
 			socket.setSoTimeout(5000);
-			socket.connect(new InetSocketAddress("auth.spinalcraft.com", 9494), 5000);
+			socket.connect(new InetSocketAddress(address, port), 5000);
 			MessageSender sender = getSender(socket, crypt);
 			sender.addHeader("intent", "registerService");
 			sender.addItem("identity", identity);
 			sender.addItem("publicKey", crypt.stringFromPublicKey(keyPair.getPublic()));
+			sender.addItem("serviceAddress", serviceAddress);
+			sender.addItem("servicePort", Integer.toString(servicePort));
 			sender.addItem("accessKey", accessKey);
 			sender.sendMessage();
 			
