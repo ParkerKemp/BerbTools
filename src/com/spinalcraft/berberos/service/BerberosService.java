@@ -62,7 +62,7 @@ public abstract class BerberosService extends BerberosEntity{
 	}
 	
 	private SecretKey register(String accessKey){
-		Socket socket = connectTo(berberosAddress, berberosPort);
+		Socket socket = connectTo(berberosAddress, berberosPort, 5000, 5);
 		if(socket == null)
 			return null;
 		try {

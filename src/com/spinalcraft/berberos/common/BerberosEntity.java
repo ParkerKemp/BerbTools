@@ -24,13 +24,28 @@ public abstract class BerberosEntity {
 	public abstract MessageReceiver getReceiver(Socket socket, EasyCrypt crypt);
 	
 	protected Socket connectTo(String address, int port){
+		return connectTo(address, port, 5000);
+	}
+	
+	protected Socket connectTo(String address, int port, int timeout){
+		return connectTo(address, port, timeout, 1);
+	}
+	
+	protected Socket connectTo(String address, int port, int timeout, int attempts){
 		Socket socket = new Socket();
-		try {
-			socket.setSoTimeout(5000);
-			socket.connect(new InetSocketAddress(address, port), 5000);
-		} catch (IOException e) {
-			e.printStackTrace();
-			return null;
+		while(attempts-- > 0){
+			try {
+				socket.setSoTimeout(timeout);
+				socket.connect(new InetSocketAddress(address, port), timeout);
+				attempts = 0;
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			try {
+				Thread.sleep(timeout);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		}
 		if(socket.isConnected())
 			return socket;
