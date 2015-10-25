@@ -1,7 +1,7 @@
 package com.spinalcraft.berberos.service;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
@@ -18,10 +18,10 @@ public abstract class BerberosService extends BerberosEntity{
 	private String serviceAddress;
 	private int servicePort;
 	private SecretKey secretKey;
-	private EasyCrypt crypt;
+	private ServerSocket serverSocket;
 	
-	public BerberosService(EasyCrypt crypt){
-		this.crypt = crypt;
+	public BerberosService(String berberosAddress, int berberosPort, EasyCrypt crypt) {
+		super(berberosAddress, berberosPort, crypt);
 	}
 	
 	public BerberosService setIdentity(String identity){
@@ -39,14 +39,20 @@ public abstract class BerberosService extends BerberosEntity{
 		return this;
 	}
 	
-	public boolean init(String address, int port, String accessKey){
+	public boolean init(String accessKey){
 		String secretKeyString = retrieveSecretKey();
 		if(secretKeyString != null)
 			secretKey = crypt.loadSecretKey(secretKeyString);
 		else{
-			secretKey = register(address, port, accessKey);
+			secretKey = register(accessKey);
 			if(secretKey == null)
 				return false;
+		}
+		try {
+			serverSocket = new ServerSocket(servicePort);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return false;
 		}
 		return true;
 	}
@@ -55,12 +61,12 @@ public abstract class BerberosService extends BerberosEntity{
 		return identity;
 	}
 	
-	private SecretKey register(String address, int port, String accessKey){
-		Socket socket = new Socket();
+	private SecretKey register(String accessKey){
+		Socket socket = connectTo(berberosAddress, berberosPort);
+		if(socket == null)
+			return null;
 		try {
 			KeyPair keyPair = crypt.generateKeys();
-			socket.setSoTimeout(5000);
-			socket.connect(new InetSocketAddress(address, port), 5000);
 			MessageSender sender = getSender(socket, crypt);
 			sender.addHeader("intent", "registerService");
 			sender.addItem("identity", identity);
@@ -79,13 +85,20 @@ public abstract class BerberosService extends BerberosEntity{
 				storeSecretKey(crypt.stringFromSecretKey(key));
 				return key;
 			}
-		} catch (IOException | GeneralSecurityException e) {
+		} catch (GeneralSecurityException e) {
 			e.printStackTrace();
 		}
 		return null;
 	}
 	
-	public ServiceAmbassador getAmbassador(Socket socket){
+	public ServiceAmbassador getAmbassador(){
+		Socket socket;
+		try {
+			socket = serverSocket.accept();
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
 		MessageReceiver receiver = getReceiver(socket, crypt);
 		receiver.receiveMessage();
 		String ticketCipher = receiver.getItem("ticket");
@@ -106,7 +119,7 @@ public abstract class BerberosService extends BerberosEntity{
 		if(!validTicket(ticket)){
 			System.out.println("Ticket was expired.");
 			notifyOfExpiredTicket(socket);
-			return getAmbassador(socket);
+			return getAmbassador();
 		}
 		
 		if(validAuthenticator(authenticator, ticket) && cacheAuthenticator(authCipher))

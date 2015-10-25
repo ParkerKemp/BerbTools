@@ -18,17 +18,12 @@ import com.spinalcraft.easycrypt.messenger.MessageSender;
 
 public abstract class BerberosClient extends BerberosEntity{
 
-	protected BerberosError lastError;
-	private String berberosAddress;
-	private int berberosPort;
-	protected EasyCrypt crypt;
-	protected boolean cacheTickets = true;
-	
-	public BerberosClient(String berberosAddress, int berberosPort, EasyCrypt crypt){
-		this.berberosAddress = berberosAddress;
-		this.berberosPort = berberosPort;
-		this.crypt = crypt;
+	public BerberosClient(String berberosAddress, int berberosPort, EasyCrypt crypt) {
+		super(berberosAddress, berberosPort, crypt);
 	}
+
+	protected BerberosError lastError;
+	protected boolean cacheTickets = true;
 	
 	public ClientAmbassador getAmbassador(String username, String password, String service){
 		AccessPackage accessPackage = null;
@@ -88,20 +83,6 @@ public abstract class BerberosClient extends BerberosEntity{
 	
 	private Socket connectToService(AccessPackage accessPackage){
 		return connectTo(accessPackage.serviceAddress, accessPackage.servicePort);
-	}
-	
-	private Socket connectTo(String address, int port){
-		Socket socket = new Socket();
-		try {
-			socket.setSoTimeout(5000);
-			socket.connect(new InetSocketAddress(address, port), 5000);
-		} catch (IOException e) {
-			e.printStackTrace();
-			return null;
-		}
-		if(socket.isConnected())
-			return socket;
-		return null;
 	}
 	
 	private AccessPackage getAccessFromAuthServer(String username, String password, String service){
