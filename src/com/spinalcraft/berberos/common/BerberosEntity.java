@@ -32,12 +32,13 @@ public abstract class BerberosEntity {
 	}
 	
 	protected Socket connectTo(String address, int port, int timeout, int attempts){
-		Socket socket = new Socket();
 		while(attempts-- > 0){
+			Socket socket = new Socket();
 			try {
 				socket.setSoTimeout(timeout);
 				socket.connect(new InetSocketAddress(address, port), timeout);
-				attempts = 0;
+				if(socket.isConnected())
+					return socket;
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -47,8 +48,6 @@ public abstract class BerberosEntity {
 				e.printStackTrace();
 			}
 		}
-		if(socket.isConnected())
-			return socket;
 		return null;
 	}
 }
