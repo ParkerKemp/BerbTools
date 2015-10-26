@@ -5,6 +5,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.util.logging.Logger;
 
 import javax.crypto.SecretKey;
 import com.spinalcraft.berberos.common.Authenticator;
@@ -19,6 +20,8 @@ public abstract class BerberosService extends BerberosEntity{
 	private int servicePort;
 	private SecretKey secretKey;
 	private ServerSocket serverSocket;
+	
+	private final static Logger logger = Logger.getLogger(BerberosService.class.getName());
 	
 	public BerberosService(String berberosAddress, int berberosPort, EasyCrypt crypt) {
 		super(berberosAddress, berberosPort, crypt);
@@ -91,19 +94,28 @@ public abstract class BerberosService extends BerberosEntity{
 		return null;
 	}
 	
+	public void serve(){
+		new Thread(new ServerTask(this, serverSocket, secretKey, crypt)).start();
+	}
+	
 	public ServiceAmbassador getAmbassador(){
 		Socket socket;
 		try {
+			System.out.println("Trying to accept socket");
 			socket = serverSocket.accept();
 		} catch (IOException e) {
 			e.printStackTrace();
 			return null;
 		}
+		System.out.println("Accepted socket");
 		MessageReceiver receiver = getReceiver(socket, crypt);
+		System.out.println("Waiting on message.");
 		receiver.receiveMessage();
+		System.out.println("Received message.");
 		String ticketCipher = receiver.getItem("ticket");
 		String authCipher = receiver.getItem("authenticator");
 		if(ticketCipher == null || authCipher == null){
+			sendDenial(socket);
 			return null;
 		}
 		
@@ -120,7 +132,6 @@ public abstract class BerberosService extends BerberosEntity{
 		Authenticator authenticator = Authenticator.fromCipher(authCipher, ticket.sessionKey, crypt);
 		
 		if(!validTicket(ticket)){
-			System.out.println("Ticket was expired.");
 			notifyOfExpiredTicket(socket);
 			return getAmbassador();
 		}
@@ -131,9 +142,17 @@ public abstract class BerberosService extends BerberosEntity{
 		return null;
 	}
 	
-	protected abstract boolean authenticatorCached(String authenticator);
+	protected abstract void onAuthenticated(ServiceAmbassador ambassador);
 	
-	protected abstract boolean cacheAuthenticator(String authenticator);
+	public abstract boolean authenticatorCached(String authenticator);
+	
+	public abstract boolean cacheAuthenticator(String authenticator);
+	
+	private void sendDenial(Socket socket){
+		MessageSender sender = getSender(socket, crypt);
+		sender.addHeader("status", "bad");
+		sender.sendMessage();
+	}
 	
 	private void notifyOfExpiredTicket(Socket socket){
 		MessageSender sender = getSender(socket, crypt);

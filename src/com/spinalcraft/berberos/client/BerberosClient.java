@@ -131,6 +131,8 @@ public abstract class BerberosClient extends BerberosEntity{
 	
 	private ClientAmbassador performHandshake(String username, String password, AccessPackage accessPackage, String service){
 		Socket socket = connectToService(accessPackage);
+		System.out.println(accessPackage.serviceAddress);
+		System.out.println(accessPackage.servicePort);
 		if(socket == null){
 			error(ErrorCode.CONNECTION);
 			return null;
