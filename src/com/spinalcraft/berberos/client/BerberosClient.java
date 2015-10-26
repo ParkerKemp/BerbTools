@@ -117,6 +117,8 @@ public abstract class BerberosClient extends BerberosEntity{
 	
 	private AccessPackage loadCachedAccessPackage(String service){
 		String accessPackageString = retrieveAccessPackage(service);
+		if(accessPackageString == null)
+			return null;
 		AccessPackage accessPackage = AccessPackage.fromJson(accessPackageString, crypt);
 //		AccessPackage accessPackage = new AccessPackage();
 //		accessPackage.serviceTicket = retrieveTicket(service);
